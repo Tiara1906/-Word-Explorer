@@ -1,0 +1,1170 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WORLD EXPLORER - Misi Menjelajahi Bentang Alam</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@400;600;700&family=Nunito:wght@400;600;700;800&display=swap" rel="stylesheet">
+    
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Nunito', 'sans-serif'],
+                        display: ['Fredoka', 'sans-serif'],
+                    },
+                    colors: {
+                        'garuda': '#ef4444', // Red
+                        'komodo': '#22c55e', // Green
+                        'cendrawasih': '#eab308', // Yellow
+                        'rajawali': '#3b82f6', // Blue
+                        'nusantara': '#f97316', // Orange
+                    },
+                    animation: {
+                        'float': 'float 3s ease-in-out infinite',
+                        'spin-slow': 'spin 20s linear infinite',
+                        'bounce-slight': 'bounceSlight 2s infinite',
+                    },
+                    keyframes: {
+                        float: {
+                            '0%, 100%': { transform: 'translateY(0)' },
+                            '50%': { transform: 'translateY(-10px)' },
+                        },
+                        bounceSlight: {
+                            '0%, 100%': { transform: 'translateY(-5%)', animationTimingFunction: 'cubic-bezier(0.8, 0, 1, 1)' },
+                            '50%': { transform: 'translateY(0)', animationTimingFunction: 'cubic-bezier(0, 0, 0.2, 1)' },
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        body {
+            background-color: #f0f9ff;
+            user-select: none; /* Prevent text selection for game feel */
+        }
+        .bg-pattern {
+            background-image: radial-gradient(#cbd5e1 1px, transparent 1px);
+            background-size: 20px 20px;
+        }
+        .glass-panel {
+            background: rgba(255, 255, 255, 0.85);
+            backdrop-filter: blur(10px);
+            border: 4px solid white;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.1);
+        }
+        .text-shadow {
+            text-shadow: 2px 2px 0px rgba(0,0,0,0.2);
+        }
+        
+        /* Map specific styles */
+        .map-container {
+            position: relative;
+            width: 100%;
+            max-width: 1000px;
+            aspect-ratio: 2 / 1;
+            background-image: url('https://upload.wikimedia.org/wikipedia/commons/8/80/World_map_-_low_resolution.svg');
+            background-size: cover;
+            background-position: center;
+            border-radius: 1rem;
+            box-shadow: inset 0 0 20px rgba(0,0,0,0.1);
+            background-color: #e0f2fe;
+            margin: 0 auto;
+        }
+        .map-pin {
+            position: absolute;
+            transform: translate(-50%, -100%);
+            transition: all 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+            filter: drop-shadow(0 4px 6px rgba(0,0,0,0.3));
+        }
+        .map-pin:hover {
+            transform: translate(-50%, -110%) scale(1.2);
+            z-index: 10;
+        }
+        .hidden-view { display: none !important; }
+        
+        /* Custom Scrollbar */
+        ::-webkit-scrollbar { width: 10px; }
+        ::-webkit-scrollbar-track { background: #f1f1f1; border-radius: 5px; }
+        ::-webkit-scrollbar-thumb { background: #93c5fd; border-radius: 5px; }
+        ::-webkit-scrollbar-thumb:hover { background: #3b82f6; }
+    </style>
+</head>
+<body class="h-screen w-full overflow-hidden flex flex-col font-sans text-slate-800 bg-sky-100 bg-pattern">
+
+    <script>
+        // Simple Web Audio API Synthesizer
+        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        let soundEnabled = true;
+
+        function playTone(freq, type, duration, vol = 0.1) {
+            if (!soundEnabled || audioCtx.state === 'suspended') return;
+            const oscillator = audioCtx.createOscillator();
+            const gainNode = audioCtx.createGain();
+            oscillator.type = type;
+            oscillator.frequency.setValueAtTime(freq, audioCtx.currentTime);
+            
+            gainNode.gain.setValueAtTime(vol, audioCtx.currentTime);
+            gainNode.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + duration);
+            
+            oscillator.connect(gainNode);
+            gainNode.connect(audioCtx.destination);
+            
+            oscillator.start();
+            oscillator.stop(audioCtx.currentTime + duration);
+        }
+
+        const sfx = {
+            click: () => playTone(800, 'sine', 0.1, 0.05),
+            correct: () => {
+                playTone(523.25, 'sine', 0.15, 0.1); // C5
+                setTimeout(() => playTone(659.25, 'sine', 0.2, 0.1), 100); // E5
+                setTimeout(() => playTone(783.99, 'sine', 0.3, 0.1), 200); // G5
+            },
+            wrong: () => {
+                playTone(300, 'sawtooth', 0.2, 0.1);
+                setTimeout(() => playTone(250, 'sawtooth', 0.4, 0.1), 150);
+            },
+            star: () => {
+                playTone(880, 'sine', 0.1, 0.05);
+                setTimeout(() => playTone(1760, 'sine', 0.2, 0.05), 100);
+            },
+            unlock: () => {
+                playTone(440, 'square', 0.1, 0.05);
+                setTimeout(() => playTone(660, 'square', 0.1, 0.05), 100);
+                setTimeout(() => playTone(880, 'square', 0.3, 0.05), 200);
+            }
+        };
+
+        // Resume audio context on first user interaction
+        document.body.addEventListener('click', () => {
+            if (audioCtx.state === 'suspended') audioCtx.resume();
+        }, { once: true });
+    </script>
+
+    <nav class="absolute top-0 w-full p-4 flex justify-between items-center z-50 pointer-events-none">
+        <div class="pointer-events-auto cursor-pointer p-2" onclick="openTeacherMode()" title="Mode Guru (Rahasia)">
+            <i class="fas fa-compass text-3xl text-sky-600 opacity-50 hover:opacity-100 transition"></i>
+        </div>
+        <div class="pointer-events-auto flex gap-4">
+            <button onclick="toggleSound()" id="soundBtn" class="bg-white/80 backdrop-blur p-3 rounded-full shadow hover:bg-white transition text-sky-600 text-xl">
+                <i class="fas fa-volume-up"></i>
+            </button>
+            <button id="navDashboardBtn" onclick="app.showView('dashboard')" class="hidden bg-sky-600 text-white px-6 py-2 rounded-full shadow-lg hover:bg-sky-700 transition font-bold text-lg">
+                <i class="fas fa-home mr-2"></i> Papan Misi
+            </button>
+        </div>
+    </nav>
+
+    <script>
+        const initialTeams = [
+            { id: 'garuda', name: 'Tim 1', color: 'bg-garuda', textColor: 'text-garuda', icon: 'fa-eagle', stars: 0, badges: [] },
+            { id: 'komodo', name: 'Tim 2', color: 'bg-komodo', textColor: 'text-komodo', icon: 'fa-dragon', stars: 0, badges: [] },
+            { id: 'cendrawasih', name: 'Tim 3', color: 'bg-cendrawasih', textColor: 'text-cendrawasih', icon: 'fa-crow', stars: 0, badges: [] },
+            { id: 'rajawali', name: 'Tim 4', color: 'bg-rajawali', textColor: 'text-rajawali', icon: 'fa-feather', stars: 0, badges: [] },
+            { id: 'nusantara', name: 'Tim 5', color: 'bg-nusantara', textColor: 'text-nusantara', icon: 'fa-map', stars: 0, badges: [] },
+        ];
+
+        const initialMissions = [
+            { id: 1, name: 'Gunung Everest', continent: 'Asia', 
+              image: 'https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcSzDbzwvpD0oN0KASyDQof9oFc-6rnnL4jKg9ZjGG-XHA&s=10', 
+              hint1: 'Dalam diam dan sunyi, aku tegak berdiri. Dinginnya salju dan angin selalu menemani.', 
+              hint2: 'Banyak orang yang ingin mencicipi. Berdiri di titik tertinggi Bumi. Meski banyak pula yang lalu mati. Tanpa sempat mencicipi mimpi.',
+              options: ['Pegunungan Alpen', 'Gunung Everest', 'Gunung Kilauea', 'Gunung Kilimanjaro'],
+              bonusQ: 'Apa ciri utama bentang alam ini?',
+              bonusOptions: ['Banyak pepohonan lebat', 'Titik tertinggi di bumi dengan salju abadi', 'Mengeluarkan lahar panas setiap hari', 'Dikelilingi lautan pasir'],
+              bonusA: 'Titik tertinggi di bumi dengan salju abadi',
+              mapPos: { top: '35%', left: '72%' }, completedBy: null },
+              
+            { id: 2, name: 'Sungai Nil', continent: 'Afrika', 
+              image: 'https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcQ8uStYtoF5eqrt0PtXgXii6vzfuMMrb4_buQm209-w_A&s=10', 
+              hint1: 'Lintasan airku yang terpanjang di dunia. Bukan hanya 1, tapi 11 negara kulalui. Aku telah ada sejak ribuan tahun silam.', 
+              hint2: 'Menjadi sumber kehidupan manusia. Sekaligus rumah buaya terbesar kedua.',
+              options: ['Sungai Amazon', 'Sungai Kapuas', 'Sungai Nil', 'Sungai Mississippi'],
+              bonusQ: 'Mengapa sungai ini sangat penting bagi masyarakat sekitarnya?',
+              bonusOptions: ['Tempat bermain ski air', 'Sumber air utama di tengah wilayah gurun yang kering', 'Menghasilkan emas yang melimpah', 'Tempat memelihara ikan hiu'],
+              bonusA: 'Sumber air utama di tengah wilayah gurun yang kering',
+              mapPos: { top: '45%', left: '55%' }, completedBy: null },
+
+            { id: 3, name: 'Air Terjun Niagara', continent: 'Amerika', 
+              image: 'https://plus.unsplash.com/premium_photo-1694475526398-41633c1675cf?fm=jpg&q=60&w=3000&auto=format&fit=crop&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxzZWFyY2h8MTd8fGFpciUyMHRlcmp1biUyMG5pYWdhcmF8ZW58MHx8MHx8fDA%3D', 
+              hint1: 'Ribuan airku jatuh dan suaranya membahana. Membuat banyak mulut menganga karena kagum dan terpana.', 
+              hint2: 'Kadang saat sinar matahari jatuh menerpa, sebuah pelangi kian memanjakan mata.',
+              options: ['Air Terjun Victoria', 'Air Terjun Angel', 'Air Terjun Niagara', 'Air Terjun Iguazu'],
+              bonusQ: 'Terletak di perbatasan negara manakah bentang alam ini?',
+              bonusOptions: ['Brasil dan Argentina', 'Amerika Serikat dan Kanada', 'Kolombia dan Peru', 'Meksiko dan Amerika Serikat'],
+              bonusA: 'Amerika Serikat dan Kanada',
+              mapPos: { top: '32%', left: '26%' }, completedBy: null },
+
+            { id: 4, name: 'Hutan Kalimantan', continent: 'Asia', 
+              image: 'https://img.magnific.com/foto-premium/pegunungan-dan-hutan-hijau-musim-panas-dari-atas_213396-1612.jpg?semt=ais_hybrid&w=740&q=80', 
+              hint1: 'Daun-daun yang rapat menjadi kanopi. Batang menjulang tinggi ke angkasa. Akar menancap kuat menjalar dalam tanah.', 
+              hint2: 'Curah hujan yang melimpah membuat ribuan flora fauna di dalamnya betah. Aku, salah satu paru-paru dunia.',
+              options: ['Hutan Amazon', 'Hutan Hitam', 'Hutan Kongo', 'Hutan Kalimantan'],
+              bonusQ: 'Apa julukan untuk bentang alam ini karena perannya bagi keseimbangan udara Bumi?',
+              bonusOptions: ['Sabuk Khatulistiwa', 'Paru-paru dunia', 'Jantung Asia', 'Mahkota Hijau'],
+              bonusA: 'Paru-paru dunia',
+              mapPos: { top: '60%', left: '77%' }, completedBy: null },
+
+            { id: 5, name: 'Gurun Sahara', continent: 'Afrika', 
+              image: 'https://img.magnific.com/foto-premium/unta-di-gurun_1599029-34.jpg?semt=ais_hybrid&w=740&q=80', 
+              hint1: 'Kering, angin, banyak debu beterbangan. Unta, kaktus, dan beberapa jenis serangga contoh dari sedikit yang bertahan.', 
+              hint2: 'Badai pasir kerap menyapa khalifah pengelana. Namun, ia tetap anugerah alam nan indah dengan oase yang menyejukkan.',
+              options: ['Gurun Gobi', 'Gurun Sahara', 'Gurun Kalahari', 'Gurun Atacama'],
+              bonusQ: 'Apa sebutan untuk sumber air bervegetasi yang terdapat di tengah bentang alam ini?',
+              bonusOptions: ['Danau Kawah', 'Rawa-rawa', 'Oase', 'Gletser'],
+              bonusA: 'Oase',
+              mapPos: { top: '40%', left: '50%' }, completedBy: null },
+
+            { id: 6, name: 'Grand Canyon', continent: 'Amerika', 
+              image: 'https://img.magnific.com/premium-photo/stunning-view-grand-canyon-golden-hour-with-sun-setting-rugged-cliffs-painted-desert-landscape_349938-17322.jpg?semt=ais_hybrid&w=740&q=80', 
+              hint1: 'Jurang luas menganga dan terbentang. Sisa dari dahsyatnya lempeng berguncang. Menyisakan ngarai juga tebing yang menantang.', 
+              hint2: 'Tak lupa ada para Indian di sana. Yang menjadi penjaga terakhir warisan budaya Benua Amerika.',
+              options: ['Lembah Baliem', 'Grand Canyon', 'Tebing Breksi', 'Gunung Rushmore'],
+              bonusQ: 'Proses alam apa yang paling berperan membentuk bentang alam ini?',
+              bonusOptions: ['Jatuhnya meteor raksasa', 'Letusan gunung berapi dahsyat', 'Erosi oleh aliran sungai selama jutaan tahun', 'Angin puting beliung'],
+              bonusA: 'Erosi oleh aliran sungai selama jutaan tahun',
+              mapPos: { top: '38%', left: '18%' }, completedBy: null },
+
+            { id: 7, name: 'Gunung Kilauea', continent: 'Amerika', 
+              image: 'https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcTKW91Fl8s5ljzRpNHBnI7CzjHeNCO3ZG7revBz3CfCUw&s=10', 
+              hint1: 'Sejak 1983, aku terus bergejolak. Memuntahkan lahar panas.', 
+              hint2: 'Kadang letusanku membentuk gugusan pulau baru. Bonusnya, tanah subur untuk pertanian.',
+              options: ['Gunung Merapi', 'Gunung Fuji', 'Gunung Vesuvius', 'Gunung Kilauea'],
+              bonusQ: 'Terletak di kepulauan manakah gunung berapi yang sangat aktif ini?',
+              bonusOptions: ['Kepulauan Galapagos', 'Kepulauan Hawaii', 'Kepulauan Maladewa', 'Kepulauan Filipina'],
+              bonusA: 'Kepulauan Hawaii',
+              mapPos: { top: '45%', left: '5%' }, completedBy: null },
+
+            { id: 8, name: 'Sungai Amazon', continent: 'Amerika', 
+              image: 'https://images.unsplash.com/photo-1559868740-429f635fcc2d?auto=format&fit=crop&q=80&w=800', 
+              hint1: 'Meliuk dan berlekuk. Hunian nyaman bagi para ikan piranha, buaya, dan banyak lagi satwa.', 
+              hint2: 'Biarpun aku bukan yang terpanjang, aliran airku yang terkuat di dunia.',
+              options: ['Sungai Nil', 'Sungai Amazon', 'Sungai Mekong', 'Sungai Gangga'],
+              bonusQ: 'Hewan air apa yang terkenal sebagai pemangsa bergigi tajam di perairan ini?',
+              bonusOptions: ['Hiu Putih Besar', 'Ikan Piranha', 'Paus Orca', 'Beruang Kutub'],
+              bonusA: 'Ikan Piranha',
+              mapPos: { top: '65%', left: '30%' }, completedBy: null },
+
+            { id: 9, name: 'Great Barrier Reef', continent: 'Australia', 
+              image: 'https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcQe9mTKgvujGNId8a9ej91dEHb8bOVXmbh3DH-UVWnKpg&s=10', 
+              hint1: 'Aku punya lebih dari 3.000 karang dan 900 pulau. Saking banyaknya, aku menjadi terumbu karang terbesar di dunia.', 
+              hint2: 'Banyak biota laut menggantungkan hidupnya padaku. Karenanya, menjaga kelestarian di kawasanku itu sangat penting.',
+              options: ['Raja Ampat', 'Teluk Halong', 'Great Barrier Reef', 'Kepulauan Seribu'],
+              bonusQ: 'Mengapa kawasan ini harus sangat dijaga kelestariannya?',
+              bonusOptions: ['Sebagai habitat dan rumah bagi jutaan biota laut', 'Karena menghasilkan minyak bumi terbesar', 'Untuk tempat membangun pabrik industri', 'Karena airnya bisa diminum langsung'],
+              bonusA: 'Sebagai habitat dan rumah bagi jutaan biota laut',
+              mapPos: { top: '75%', left: '88%' }, completedBy: null },
+
+            { id: 10, name: 'Pegunungan Alpen', continent: 'Eropa', 
+              image: 'https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcTnt9uSGv9Q3R6rJmrHW8IDtKzkXkC8b9MutqNvdz7XHw&s=10', 
+              hint1: 'Tak hanya 1, 2, 3, tapi aku melintasi 8 negara di benua ini. Aku adalah penyedia air terbesar bagi para penghuni.', 
+              hint2: 'Titik tertinggiku diselimuti salju abadi. Percayalah, aku tempat yang banyak dicari untuk sekadar menenangkan diri.',
+              options: ['Pegunungan Himalaya', 'Pegunungan Andes', 'Pegunungan Rocky', 'Pegunungan Alpen'],
+              bonusQ: 'Kegiatan wisata dan olahraga apa yang sangat populer di lereng pegunungan ini?',
+              bonusOptions: ['Berselancar ombak besar', 'Bermain ski salju', 'Menyelam di terumbu karang', 'Safari padang rumput'],
+              bonusA: 'Bermain ski salju',
+              mapPos: { top: '30%', left: '52%' }, completedBy: null },
+
+            { id: 11, name: 'Danau Kaspia', continent: 'Eropa dan Asia', 
+              image: 'https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcRGr0ZIWffIqKFt9uKURQL7xqBpIzdxB1sfk1GImgG__w&s=10', 
+              hint1: 'Airku banyak dan rasanya asin. Tapi, permukaanku rata, tak berombak, dan sekelilingku berupa daratan.', 
+              hint2: 'Letakku strategis, karena ada di perbatasan. Bagiku menjadi wadah air terbesar di dunia, merupakan kebanggaan.',
+              options: ['Danau Toba', 'Laut Merah', 'Danau Kaspia', 'Laut Mati'],
+              bonusQ: 'Meskipun bernama danau, mengapa perairan ini sering disebut sebagai laut?',
+              bonusOptions: ['Karena ukurannya yang sangat besar dan airnya bersalinitas (asin)', 'Karena banyak kapal selam militer bersembunyi di sana', 'Karena dihuni oleh berbagai jenis paus dan hiu', 'Karena bersambung langsung dengan samudra terbuka'],
+              bonusA: 'Karena ukurannya yang sangat besar dan airnya bersalinitas (asin)',
+              mapPos: { top: '32%', left: '62%' }, completedBy: null }
+        ];
+
+        const continents = ['Asia', 'Afrika', 'Amerika', 'Eropa', 'Australia', 'Antarktika'];
+
+        let appState = {
+            teams: JSON.parse(localStorage.getItem('tgt_teams_v2')) || initialTeams,
+            missions: JSON.parse(localStorage.getItem('tgt_missions_v2')) || initialMissions,
+            currentValidation: null // { teamId, missionId, step, hintsUsed, starsEarned }
+        };
+        
+        // Update team names in existing state to reflect changes without resetting
+        const t1 = appState.teams.find(t => t.id === 'garuda'); if(t1) t1.name = 'Tim 1';
+        const t2 = appState.teams.find(t => t.id === 'komodo'); if(t2) t2.name = 'Tim 2';
+        const t3 = appState.teams.find(t => t.id === 'cendrawasih'); if(t3) t3.name = 'Tim 3';
+        const t4 = appState.teams.find(t => t.id === 'rajawali'); if(t4) t4.name = 'Tim 4';
+        const t5 = appState.teams.find(t => t.id === 'nusantara'); if(t5) t5.name = 'Tim 5';
+
+        const everestMission = appState.missions.find(m => m.id === 1);
+        if(everestMission) everestMission.image = 'https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcSzDbzwvpD0oN0KASyDQof9oFc-6rnnL4jKg9ZjGG-XHA&s=10';
+
+        const nilMission = appState.missions.find(m => m.id === 2);
+        if(nilMission) nilMission.image = 'https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcQ8uStYtoF5eqrt0PtXgXii6vzfuMMrb4_buQm209-w_A&s=10';
+
+        const niagaraMission = appState.missions.find(m => m.id === 3);
+        if(niagaraMission) niagaraMission.image = 'https://plus.unsplash.com/premium_photo-1694475526398-41633c1675cf?fm=jpg&q=60&w=3000&auto=format&fit=crop&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxzZWFyY2h8MTd8fGFpciUyMHRlcmp1biUyMG5pYWdhcmF8ZW58MHx8MHx8fDA%3D';
+
+        const kalimantanMission = appState.missions.find(m => m.id === 4);
+        if(kalimantanMission) kalimantanMission.image = 'https://img.magnific.com/foto-premium/pegunungan-dan-hutan-hijau-musim-panas-dari-atas_213396-1612.jpg?semt=ais_hybrid&w=740&q=80';
+
+        const saharaMission = appState.missions.find(m => m.id === 5);
+        if(saharaMission) saharaMission.image = 'https://img.magnific.com/foto-premium/unta-di-gurun_1599029-34.jpg?semt=ais_hybrid&w=740&q=80';
+
+        const grandCanyonMission = appState.missions.find(m => m.id === 6);
+        if(grandCanyonMission) grandCanyonMission.image = 'https://img.magnific.com/premium-photo/stunning-view-grand-canyon-golden-hour-with-sun-setting-rugged-cliffs-painted-desert-landscape_349938-17322.jpg?semt=ais_hybrid&w=740&q=80';
+
+        const kilaueaMission = appState.missions.find(m => m.id === 7);
+        if(kilaueaMission) kilaueaMission.image = 'https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcTKW91Fl8s5ljzRpNHBnI7CzjHeNCO3ZG7revBz3CfCUw&s=10';
+
+        const kaspiaMission = appState.missions.find(m => m.id === 11);
+        if(kaspiaMission) kaspiaMission.image = 'https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcRGr0ZIWffIqKFt9uKURQL7xqBpIzdxB1sfk1GImgG__w&s=10';
+
+        const alpenMission = appState.missions.find(m => m.id === 10);
+        if(alpenMission) alpenMission.image = 'https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcTnt9uSGv9Q3R6rJmrHW8IDtKzkXkC8b9MutqNvdz7XHw&s=10';
+
+        const greatBarrierReefMission = appState.missions.find(m => m.id === 9);
+        if(greatBarrierReefMission) greatBarrierReefMission.image = 'https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcQe9mTKgvujGNId8a9ej91dEHb8bOVXmbh3DH-UVWnKpg&s=10';
+
+        const amazonMission = appState.missions.find(m => m.id === 8);
+        if(amazonMission) amazonMission.image = 'https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcTp7v0lfomK-m6M_Irnbp70CcteyeL8QvV4B7MIjxr8Ww&s=10';
+
+        function saveData() {
+            localStorage.setItem('tgt_teams_v2', JSON.stringify(appState.teams));
+            localStorage.setItem('tgt_missions_v2', JSON.stringify(appState.missions));
+        }
+
+        function resetGame() {
+            if(confirm("Yakin ingin menghapus semua progres dan mengulang permainan?")) {
+                localStorage.removeItem('tgt_teams_v2');
+                localStorage.removeItem('tgt_missions_v2');
+                appState.teams = JSON.parse(JSON.stringify(initialTeams));
+                appState.missions = JSON.parse(JSON.stringify(initialMissions));
+                app.showView('home');
+            }
+        }
+    </script>
+
+    <script>
+        const app = {
+            views: ['home', 'howto', 'dashboard', 'validation', 'map', 'tournament', 'leaderboard', 'teacher'],
+            
+            showView: function(viewId) {
+                sfx.click();
+                this.views.forEach(v => {
+                    document.getElementById(`view-${v}`).classList.add('hidden-view');
+                });
+                document.getElementById(`view-${viewId}`).classList.remove('hidden-view');
+                
+                // Specific view initializations
+                if(viewId === 'dashboard') this.renderDashboard();
+                if(viewId === 'map') this.renderMap();
+                if(viewId === 'leaderboard') this.renderLeaderboard();
+                if(viewId === 'teacher') this.renderTeacherDashboard();
+                
+                // Show/hide nav button
+                const navBtn = document.getElementById('navDashboardBtn');
+                if(['home', 'howto'].includes(viewId)) navBtn.classList.add('hidden');
+                else navBtn.classList.remove('hidden');
+            },
+
+            triggerConfetti: function() {
+                var duration = 3000;
+                var end = Date.now() + duration;
+
+                (function frame() {
+                    confetti({ particleCount: 5, angle: 60, spread: 55, origin: { x: 0 }, colors: ['#ef4444', '#22c55e', '#eab308', '#3b82f6'] });
+                    confetti({ particleCount: 5, angle: 120, spread: 55, origin: { x: 1 }, colors: ['#ef4444', '#22c55e', '#eab308', '#3b82f6'] });
+                    if (Date.now() < end) requestAnimationFrame(frame);
+                }());
+            }
+        };
+
+        function toggleSound() {
+            soundEnabled = !soundEnabled;
+            document.getElementById('soundBtn').innerHTML = soundEnabled ? '<i class="fas fa-volume-up"></i>' : '<i class="fas fa-volume-mute"></i>';
+            if(soundEnabled && audioCtx.state === 'suspended') audioCtx.resume();
+        }
+
+        function openTeacherMode() {
+            let pin = prompt("Masukkan PIN Guru:");
+            if(pin === '1234') app.showView('teacher');
+            else if(pin) alert("PIN Salah!");
+        }
+    </script>
+
+    <main class="flex-1 w-full h-full relative overflow-y-auto overflow-x-hidden pt-16">
+        
+        <!-- View: HOME -->
+        <div id="view-home" class="min-h-full flex flex-col items-center justify-center p-8 text-center relative">
+            <div class="absolute inset-0 z-0 opacity-20 pointer-events-none flex items-center justify-center">
+                <i class="fas fa-globe-americas text-[30rem] text-sky-500 animate-spin-slow"></i>
+            </div>
+            
+            <div class="z-10 glass-panel p-12 rounded-3xl max-w-3xl animate-float">
+                <h2 class="text-2xl font-bold text-sky-600 mb-2 uppercase tracking-widest">PEMBELAJARAN IPAS BAB 3</h2>
+                <h1 class="text-6xl md:text-7xl font-display font-bold text-sky-900 mb-6 text-shadow">
+                    WORLD EXPLORER
+                </h1>
+                <div class="bg-sky-100 p-4 rounded-xl inline-block mb-8 border-2 border-sky-200">
+                    <p class="text-xl md:text-2xl font-semibold text-sky-800">Misi Menjelajahi Bentang Alam Dunia</p>
+                </div>
+                
+                <p class="text-lg md:text-xl text-slate-600 mb-10 leading-relaxed">
+                    "Selamat datang Penjelajah!<br>Hari ini kalian akan menjelajahi dunia untuk menemukan 11 bentang alam terkenal."
+                </p>
+                
+                <div class="flex flex-col sm:flex-row gap-6 justify-center">
+                    <button onclick="app.showView('dashboard')" class="bg-gradient-to-b from-green-400 to-green-600 text-white font-bold text-2xl py-4 px-10 rounded-full shadow-[0_6px_0_#166534] active:shadow-[0_0px_0_#166534] active:translate-y-[6px] transition-all hover:scale-105">
+                        <i class="fas fa-rocket mr-2"></i> MULAI MISI
+                    </button>
+                    <button onclick="app.showView('howto')" class="bg-white text-sky-700 font-bold text-xl py-4 px-8 rounded-full border-4 border-sky-200 hover:bg-sky-50 transition-all">
+                        <i class="fas fa-book-open mr-2"></i> Cara Bermain
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- View: HOW TO PLAY -->
+        <div id="view-howto" class="hidden-view min-h-full p-8 max-w-5xl mx-auto flex flex-col">
+            <h1 class="text-4xl font-display font-bold text-center text-sky-900 mb-10"><i class="fas fa-map-signs text-sky-500 mr-3"></i> Panduan Ekspedisi</h1>
+            
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 flex-1 content-start">
+                <div class="glass-panel p-6 rounded-2xl flex flex-col items-center text-center">
+                    <div class="w-20 h-20 bg-sky-100 text-sky-600 rounded-full flex items-center justify-center text-4xl mb-4"><i class="fas fa-search"></i></div>
+                    <h3 class="font-bold text-xl mb-2">1. Cari Kartu</h3>
+                    <p class="text-slate-600">Cari kartu bentang alam yang disembunyikan guru di area sekolah.</p>
+                </div>
+                <div class="glass-panel p-6 rounded-2xl flex flex-col items-center text-center">
+                    <div class="w-20 h-20 bg-yellow-100 text-yellow-600 rounded-full flex items-center justify-center text-4xl mb-4"><i class="fas fa-users"></i></div>
+                    <h3 class="font-bold text-xl mb-2">2. Diskusi</h3>
+                    <p class="text-slate-600">Diskusikan gambar dan petunjuk bersama kelompokmu.</p>
+                </div>
+                <div class="glass-panel p-6 rounded-2xl flex flex-col items-center text-center">
+                    <div class="w-20 h-20 bg-red-100 text-red-600 rounded-full flex items-center justify-center text-4xl mb-4"><i class="fas fa-running"></i></div>
+                    <h3 class="font-bold text-xl mb-2">3. Lapor Guru</h3>
+                    <p class="text-slate-600">Segera datang ke Pos Validasi Guru membawa kartu.</p>
+                </div>
+                <div class="glass-panel p-6 rounded-2xl flex flex-col items-center text-center">
+                    <div class="w-20 h-20 bg-purple-100 text-purple-600 rounded-full flex items-center justify-center text-4xl mb-4"><i class="fas fa-brain"></i></div>
+                    <h3 class="font-bold text-xl mb-2">4. Jawab Misi</h3>
+                    <p class="text-slate-600">Jawab pertanyaan berjenjang dari Game Master (Website).</p>
+                </div>
+                <div class="glass-panel p-6 rounded-2xl flex flex-col items-center text-center">
+                    <div class="w-20 h-20 bg-yellow-100 text-yellow-500 rounded-full flex items-center justify-center text-4xl mb-4"><i class="fas fa-star"></i></div>
+                    <h3 class="font-bold text-xl mb-2">5. Raih Bintang</h3>
+                    <p class="text-slate-600">Kumpulkan hingga 4 bintang untuk setiap pos yang dijawab benar.</p>
+                </div>
+                <div class="glass-panel p-6 rounded-2xl flex flex-col items-center text-center">
+                    <div class="w-20 h-20 bg-green-100 text-green-600 rounded-full flex items-center justify-center text-4xl mb-4"><i class="fas fa-globe"></i></div>
+                    <h3 class="font-bold text-xl mb-2">6. Buka Peta</h3>
+                    <p class="text-slate-600">Selesaikan pos untuk membuka wilayah baru di Peta Dunia.</p>
+                </div>
+            </div>
+            
+            <div class="text-center mt-10 pb-10">
+                <button onclick="app.showView('home')" class="bg-slate-800 text-white font-bold py-3 px-8 rounded-full shadow hover:bg-slate-700">Kembali</button>
+            </div>
+        </div>
+
+        <!-- View: DASHBOARD -->
+        <div id="view-dashboard" class="hidden-view min-h-full p-6 max-w-7xl mx-auto">
+            
+            <!-- Progress Section -->
+            <div class="glass-panel p-6 rounded-2xl mb-8 flex flex-col md:flex-row items-center justify-between gap-6">
+                <div class="flex-1 w-full">
+                    <h2 class="text-2xl font-display font-bold text-sky-900 mb-2">PAPAN MISI EKSPEDISI</h2>
+                    <div class="w-full bg-slate-200 rounded-full h-6 border border-slate-300 overflow-hidden relative">
+                        <div id="overallProgress" class="bg-gradient-to-r from-green-400 to-green-600 h-6 transition-all duration-1000" style="width: 0%"></div>
+                        <div class="absolute inset-0 flex items-center justify-center text-sm font-bold text-slate-700 drop-shadow-md">
+                            <span id="progressText">0 / 11 POS SELESAI</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="flex gap-4">
+                    <button onclick="app.showView('map')" class="bg-indigo-600 text-white font-bold py-3 px-6 rounded-xl shadow-lg hover:bg-indigo-700 transition">
+                        <i class="fas fa-map-marked-alt mr-2"></i> Lihat Peta
+                    </button>
+                    <button onclick="app.showView('leaderboard')" class="bg-yellow-500 text-white font-bold py-3 px-6 rounded-xl shadow-lg hover:bg-yellow-600 transition">
+                        <i class="fas fa-trophy mr-2"></i> Klasemen
+                    </button>
+                </div>
+            </div>
+
+            <!-- Teacher Validation Controls -->
+            <div class="bg-white p-6 rounded-2xl shadow-md border-l-8 border-sky-500 mb-8 flex flex-col md:flex-row items-center gap-4">
+                <div class="font-bold text-sky-800 text-lg whitespace-nowrap"><i class="fas fa-user-check mr-2"></i> Validasi Guru:</div>
+                <select id="teamSelect" class="flex-1 p-3 border-2 border-slate-200 rounded-xl text-lg font-bold text-slate-700 focus:outline-none focus:border-sky-500 bg-slate-50">
+                    <option value="">-- Pilih Kelompok --</option>
+                    <option value="garuda">🦅 Tim 1</option>
+                    <option value="komodo">🦎 Tim 2</option>
+                    <option value="cendrawasih">🐦 Tim 3</option>
+                    <option value="rajawali">🦅 Tim 4</option>
+                    <option value="nusantara">🌴 Tim 5</option>
+                </select>
+                <select id="posSelect" class="flex-1 p-3 border-2 border-slate-200 rounded-xl text-lg font-bold text-slate-700 focus:outline-none focus:border-sky-500 bg-slate-50">
+                    <option value="">-- Pilih Pos Misi --</option>
+                    <!-- Populated by JS -->
+                </select>
+                <button onclick="startValidation()" class="bg-sky-600 text-white font-bold py-3 px-8 rounded-xl shadow-[0_4px_0_#0284c7] active:shadow-[0_0px_0_#0284c7] active:translate-y-[4px] transition-all whitespace-nowrap">
+                    Buka Misi
+                </button>
+            </div>
+
+            <!-- Missions Grid -->
+            <div id="missionsGrid" class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 pb-20">
+                <!-- Populated by JS -->
+            </div>
+            
+            <div class="text-center mt-8 pb-10">
+                 <button onclick="app.showView('tournament')" class="bg-gradient-to-r from-purple-600 to-indigo-600 text-white font-bold text-2xl py-4 px-12 rounded-full shadow-lg hover:scale-105 transition animate-pulse hidden" id="btnGoTournament">
+                    <i class="fas fa-crown mr-2"></i> MULAI TOURNAMENT
+                </button>
+            </div>
+        </div>
+
+        <script>
+            app.renderDashboard = function() {
+                const grid = document.getElementById('missionsGrid');
+                const posSelect = document.getElementById('posSelect');
+                grid.innerHTML = '';
+                posSelect.innerHTML = '<option value="">-- Pilih Pos Misi --</option>';
+                
+                let completedCount = 0;
+
+                appState.missions.forEach(m => {
+                    if(m.completedBy) completedCount++;
+                    
+                    // Populate Dropdown
+                    if(!m.completedBy) {
+                        const opt = document.createElement('option');
+                        opt.value = m.id;
+                        opt.textContent = `POS ${m.id.toString().padStart(2, '0')} - Belum Selesai`;
+                        posSelect.appendChild(opt);
+                    }
+
+                    // Populate Grid
+                    const card = document.createElement('div');
+                    card.className = `p-4 rounded-2xl border-4 transition-all duration-300 ${m.completedBy ? 'bg-green-50 border-green-400' : 'bg-slate-100 border-slate-300 opacity-80'}`;
+                    
+                    if(m.completedBy) {
+                        const team = appState.teams.find(t => t.id === m.completedBy);
+                        card.innerHTML = `
+                            <div class="flex justify-between items-start mb-2">
+                                <span class="font-bold text-slate-500">POS ${m.id.toString().padStart(2, '0')}</span>
+                                <span class="bg-green-500 text-white text-xs px-2 py-1 rounded-full"><i class="fas fa-check"></i> Selesai</span>
+                            </div>
+                            <div class="h-24 bg-slate-200 rounded-lg mb-3 overflow-hidden">
+                                <img src="${m.image}" class="w-full h-full object-cover">
+                            </div>
+                            <h3 class="font-bold text-slate-800 text-lg leading-tight mb-2">${m.name}</h3>
+                            <div class="flex items-center text-sm font-bold ${team.textColor}">
+                                <i class="fas ${team.icon} mr-1"></i> Ditaklukkan oleh ${team.name}
+                            </div>
+                        `;
+                    } else {
+                        card.innerHTML = `
+                            <div class="flex justify-between items-start mb-4">
+                                <span class="font-bold text-slate-500">POS ${m.id.toString().padStart(2, '0')}</span>
+                                <i class="fas fa-lock text-slate-400"></i>
+                            </div>
+                            <div class="flex flex-col items-center justify-center h-24 text-slate-400 mb-2">
+                                <i class="fas fa-question-circle text-5xl mb-2"></i>
+                                <span class="font-bold">Misi Terkunci</span>
+                            </div>
+                        `;
+                    }
+                    grid.appendChild(card);
+                });
+
+                document.getElementById('overallProgress').style.width = `${(completedCount/11)*100}%`;
+                document.getElementById('progressText').textContent = `${completedCount} / 11 POS SELESAI`;
+
+                if(completedCount === 11) {
+                    document.getElementById('btnGoTournament').classList.remove('hidden');
+                }
+            };
+
+            function startValidation() {
+                const teamId = document.getElementById('teamSelect').value;
+                const posId = parseInt(document.getElementById('posSelect').value);
+
+                if(!teamId || !posId) {
+                    alert("Pilih Kelompok dan Pos terlebih dahulu!");
+                    return;
+                }
+
+                appState.currentValidation = {
+                    teamId: teamId,
+                    missionId: posId,
+                    step: 1, // 1: Name, 2: Continent, 3: Bonus, 4: Result
+                    hintsUsed: 0,
+                    starsEarned: 0
+                };
+                
+                renderValidationStep();
+                app.showView('validation');
+            }
+        </script>
+
+        <!-- View: VALIDATION -->
+        <div id="view-validation" class="hidden-view min-h-full p-4 flex items-center justify-center bg-slate-900 absolute inset-0 z-40">
+            <div id="val-container" class="bg-white w-full max-w-4xl rounded-3xl overflow-hidden shadow-2xl flex flex-col max-h-[90vh]">
+                <!-- Header -->
+                <div class="bg-slate-800 text-white p-4 flex justify-between items-center">
+                    <div id="val-header-pos" class="font-bold text-xl text-sky-400">POS 00</div>
+                    <div id="val-header-team" class="font-bold text-xl px-4 py-1 rounded-full bg-slate-700">
+                        <i class="fas fa-users mr-2"></i> Tim
+                    </div>
+                    <div class="text-yellow-400 font-bold text-xl">
+                        <span id="val-potensi-bintang">⭐⭐⭐⭐</span>
+                    </div>
+                </div>
+
+                <!-- Content Area -->
+                <div id="val-content" class="p-6 flex-1 overflow-y-auto flex flex-col items-center">
+                    <!-- Dynamic Content Injected Here -->
+                </div>
+
+                <!-- Footer/Controls -->
+                <div id="val-footer" class="bg-slate-100 p-4 border-t flex justify-center gap-4">
+                     <!-- Dynamic Controls Injected Here -->
+                </div>
+            </div>
+            
+            <!-- Fullscreen Feedback Overlay -->
+            <div id="feedback-overlay" class="fixed inset-0 z-50 hidden flex-col items-center justify-center p-8 text-center backdrop-blur-md">
+                <i id="fb-icon" class="fas text-8xl mb-6"></i>
+                <h2 id="fb-title" class="text-5xl font-display font-bold mb-4 text-white">BENAR!</h2>
+                <p id="fb-msg" class="text-2xl text-white mb-8 max-w-2xl font-bold"></p>
+                <div id="fb-actions" class="flex gap-4"></div>
+            </div>
+        </div>
+
+        <script>
+            function getPotensiBintangStr() {
+                const baseStars = appState.currentValidation.step === 1 ? 2 : 1;
+                let potential = baseStars - appState.currentValidation.hintsUsed;
+                if(potential < 1) potential = 1; // Min 1 star if correct
+                return '⭐'.repeat(potential);
+            }
+
+            function updateValHeader() {
+                const v = appState.currentValidation;
+                const team = appState.teams.find(t => t.id === v.teamId);
+                document.getElementById('val-header-pos').textContent = `POS ${v.missionId.toString().padStart(2, '0')}`;
+                document.getElementById('val-header-team').innerHTML = `<i class="fas ${team.icon} mr-2"></i> ${team.name}`;
+                document.getElementById('val-potensi-bintang').textContent = getPotensiBintangStr();
+            }
+
+            function renderValidationStep() {
+                const v = appState.currentValidation;
+                const m = appState.missions.find(m => m.id === v.missionId);
+                const content = document.getElementById('val-content');
+                const footer = document.getElementById('val-footer');
+                updateValHeader();
+
+                if (v.step === 1) {
+                    // Step 1: Guess Name from Image/Hint
+                    let hintHtml = '';
+                    if(v.hintsUsed >= 1) hintHtml += `<div class="bg-yellow-50 p-4 rounded-xl border-l-4 border-yellow-400 mb-2 font-semibold text-slate-700"><i class="fas fa-lightbulb text-yellow-500 mr-2"></i> ${m.hint1}</div>`;
+                    if(v.hintsUsed >= 2) hintHtml += `<div class="bg-orange-50 p-4 rounded-xl border-l-4 border-orange-400 mb-4 font-semibold text-slate-700"><i class="fas fa-search text-orange-500 mr-2"></i> ${m.hint2}</div>`;
+
+                    content.innerHTML = `
+                        <h2 class="text-2xl font-bold text-slate-800 mb-4 text-center">Tantangan 1: Identifikasi Bentang Alam</h2>
+                        <img src="${m.image}" class="w-full max-w-2xl h-64 object-cover rounded-2xl shadow-md mb-6 border-4 border-slate-200">
+                        <div class="w-full max-w-2xl text-left">${hintHtml}</div>
+                        <p class="text-xl font-bold mb-4">Apa nama bentang alam ini?</p>
+                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 w-full max-w-2xl">
+                            ${m.options.map(opt => `
+                                <button onclick="checkAnswer(1, '${opt}', '${m.name}')" class="p-4 bg-white border-2 border-slate-300 rounded-xl font-bold text-lg hover:border-sky-500 hover:bg-sky-50 transition shadow-sm text-left">
+                                    <i class="far fa-circle text-slate-400 mr-2"></i> ${opt}
+                                </button>
+                            `).join('')}
+                        </div>
+                    `;
+                    footer.innerHTML = `
+                        <button onclick="useHint()" class="bg-amber-500 text-white font-bold py-2 px-6 rounded-lg hover:bg-amber-600 ${v.hintsUsed >= 2 ? 'opacity-50 cursor-not-allowed' : ''}" ${v.hintsUsed >= 2 ? 'disabled' : ''}>
+                            <i class="fas fa-lightbulb mr-2"></i> Gunakan Petunjuk (-1 ⭐)
+                        </button>
+                    `;
+                } 
+                else if (v.step === 2) {
+                    content.innerHTML = `
+                        <h2 class="text-2xl font-bold text-slate-800 mb-6 text-center">Tantangan 2: Lokasi Benua</h2>
+                        <div class="bg-sky-100 p-6 rounded-2xl border-2 border-sky-200 mb-8 text-center max-w-xl w-full">
+                            <h3 class="text-3xl font-display font-bold text-sky-800 mb-2">${m.name}</h3>
+                        </div>
+                        <p class="text-xl font-bold mb-6">Berada di benua manakah bentang alam ini?</p>
+                        <div class="flex flex-wrap justify-center gap-4 max-w-3xl">
+                            ${continents.map(c => `
+                                <button onclick="checkAnswer(2, '${c}', '${m.continent}')" class="py-4 px-6 bg-white border-2 border-slate-300 rounded-xl font-bold text-lg hover:border-sky-500 hover:bg-sky-50 transition shadow-sm flex flex-col items-center min-w-[120px]">
+                                    <i class="fas fa-globe-americas text-3xl text-slate-400 mb-2"></i> ${c}
+                                </button>
+                            `).join('')}
+                        </div>
+                    `;
+                    footer.innerHTML = '';
+                }
+                else if (v.step === 3) {
+                    content.innerHTML = `
+                        <h2 class="text-2xl font-bold text-slate-800 mb-6 text-center">Tantangan Bonus: Detektif Geografi</h2>
+                        <div class="bg-indigo-50 p-6 rounded-2xl border-2 border-indigo-200 mb-8 text-center max-w-2xl w-full">
+                            <p class="text-xl font-bold text-indigo-900">${m.bonusQ}</p>
+                        </div>
+                        <div class="grid grid-cols-1 gap-4 w-full max-w-2xl">
+                            ${m.bonusOptions.map(opt => `
+                                <button onclick="checkAnswer(3, '${opt}', '${m.bonusA}')" class="p-4 bg-white border-2 border-slate-300 rounded-xl font-bold text-lg hover:border-indigo-500 hover:bg-indigo-50 transition shadow-sm text-left">
+                                    <i class="fas fa-chevron-right text-slate-400 mr-2"></i> ${opt}
+                                </button>
+                            `).join('')}
+                        </div>
+                    `;
+                    footer.innerHTML = '';
+                }
+                else if (v.step === 4) {
+                    // Result Summary
+                    const team = appState.teams.find(t => t.id === v.teamId);
+                    // Prevent double counting if step 4 is rendered multiple times accidentally
+                    if (!m.completedBy) {
+                        team.stars += v.starsEarned;
+                        m.completedBy = team.id;
+                        saveData();
+                        sfx.unlock();
+                    }
+
+                    content.innerHTML = `
+                        <div class="text-center mt-10">
+                            <i class="fas fa-unlock-alt text-6xl text-green-500 mb-6 animate-bounce-slight"></i>
+                            <h2 class="text-4xl font-display font-bold text-slate-800 mb-2">POS BERHASIL DITAKLUKKAN!</h2>
+                            <p class="text-2xl text-slate-600 mb-8 font-bold">${m.name}</p>
+                            
+                            <div class="bg-yellow-50 border-2 border-yellow-200 rounded-2xl p-8 max-w-sm mx-auto shadow-lg">
+                                <p class="text-lg font-semibold text-slate-700 mb-2">${team.name} mendapatkan:</p>
+                                <div class="text-5xl mb-2">${'⭐'.repeat(v.starsEarned)}</div>
+                                <p class="text-2xl font-bold text-yellow-600">+${v.starsEarned} Bintang</p>
+                            </div>
+                        </div>
+                    `;
+                    footer.innerHTML = `
+                        <button onclick="finishValidation()" class="bg-sky-600 text-white font-bold py-3 px-8 rounded-xl hover:bg-sky-700 transition w-full max-w-xs">
+                            Kembali ke Papan Misi
+                        </button>
+                    `;
+                }
+            }
+
+            function finishValidation() {
+                appState.currentValidation = null;
+                app.showView('dashboard');
+            }
+
+            function checkAnswer(step, selected, correct) {
+                const v = appState.currentValidation;
+                const isCorrect = selected === correct;
+                
+                const overlay = document.getElementById('feedback-overlay');
+                const icon = document.getElementById('fb-icon');
+                const title = document.getElementById('fb-title');
+                const msg = document.getElementById('fb-msg');
+                const actions = document.getElementById('fb-actions');
+                const team = appState.teams.find(t => t.id === v.teamId);
+
+                overlay.classList.remove('hidden');
+                
+                if (isCorrect) {
+                    sfx.correct();
+                    let starsEarnedNow = step === 1 ? Math.max(1, 2 - v.hintsUsed) : 1;
+                    v.starsEarned += starsEarnedNow;
+                    
+                    if(step === 1) app.triggerConfetti();
+
+                    overlay.className = 'fixed inset-0 z-50 flex flex-col items-center justify-center p-8 text-center bg-green-600/95 backdrop-blur-md';
+                    icon.className = 'fas fa-check-circle text-8xl mb-6 text-white animate-bounce-slight';
+                    title.textContent = 'BENAR!';
+                    title.className = 'text-5xl font-display font-bold mb-4 text-white';
+                    msg.innerHTML = `Hebat ${team.name}!<br>Kalian mendapat <span class="text-yellow-300 font-black">+${starsEarnedNow} Bintang</span>`;
+                    
+                    // Fixed: Define a global function for next step to avoid eval/string execution issues
+                    window.nextValidationStep = function() {
+                        appState.currentValidation.step++;
+                        if (step < 3) {
+                            appState.currentValidation.hintsUsed = 0; // Reset hints for next step if any
+                        }
+                        closeFeedback();
+                        renderValidationStep();
+                    };
+
+                    actions.innerHTML = `
+                        <button onclick="window.nextValidationStep()" class="bg-white text-green-700 font-bold py-3 px-8 rounded-full text-xl shadow-lg hover:scale-105 transition">
+                            Lanjutkan Misi <i class="fas fa-arrow-right ml-2"></i>
+                        </button>
+                    `;
+                } else {
+                    sfx.wrong();
+                    overlay.className = 'fixed inset-0 z-50 flex flex-col items-center justify-center p-8 text-center bg-orange-500/95 backdrop-blur-md';
+                    icon.className = 'fas fa-times-circle text-8xl mb-6 text-white';
+                    title.textContent = 'BELUM TEPAT';
+                    title.className = 'text-5xl font-display font-bold mb-4 text-white';
+                    msg.innerHTML = 'Jangan menyerah Penjelajah.<br>Diskusikan lagi dengan kelompokmu.';
+                    
+                    let hintBtn = '';
+                    if(step === 1 && v.hintsUsed < 2) {
+                        hintBtn = `<button onclick="closeFeedback(); useHint();" class="bg-yellow-400 text-orange-900 font-bold py-3 px-6 rounded-full text-lg shadow-lg hover:bg-yellow-300 transition">
+                            💡 Gunakan Petunjuk
+                        </button>`;
+                    }
+
+                    actions.innerHTML = `
+                        <button onclick="closeFeedback()" class="bg-white text-orange-700 font-bold py-3 px-8 rounded-full text-lg shadow-lg hover:bg-slate-100 transition">
+                            <i class="fas fa-redo mr-2"></i> Coba Lagi
+                        </button>
+                        ${hintBtn}
+                    `;
+                }
+            }
+
+            function useHint() {
+                if(appState.currentValidation.hintsUsed < 2) {
+                    appState.currentValidation.hintsUsed++;
+                    renderValidationStep();
+                }
+            }
+
+            function closeFeedback() {
+                document.getElementById('feedback-overlay').classList.add('hidden');
+            }
+        </script>
+
+
+        <!-- View: MAP -->
+        <div id="view-map" class="hidden-view min-h-full p-6 flex flex-col">
+            <div class="flex justify-between items-center mb-6">
+                <h2 class="text-3xl font-display font-bold text-sky-900"><i class="fas fa-map-marked-alt text-sky-600 mr-2"></i> Peta Penjelajahan</h2>
+                <button onclick="app.showView('dashboard')" class="bg-slate-200 text-slate-700 font-bold py-2 px-6 rounded-xl hover:bg-slate-300">Kembali</button>
+            </div>
+            
+            <div class="flex-1 flex items-center justify-center p-4">
+                <div class="map-container relative" id="mapArea">
+                    <!-- Map background image via CSS -->
+                    <!-- Pins injected here -->
+                </div>
+            </div>
+            <div class="text-center text-slate-500 font-bold mt-4">Peta terbuka otomatis seiring misi diselesaikan kelompok.</div>
+        </div>
+
+        <script>
+            app.renderMap = function() {
+                const mapArea = document.getElementById('mapArea');
+                mapArea.innerHTML = ''; // Clear
+
+                appState.missions.forEach(m => {
+                    if(m.completedBy) {
+                        const team = appState.teams.find(t => t.id === m.completedBy);
+                        const pin = document.createElement('div');
+                        pin.className = 'map-pin cursor-pointer group';
+                        pin.style.top = m.mapPos.top;
+                        pin.style.left = m.mapPos.left;
+                        
+                        pin.innerHTML = `
+                            <div class="relative">
+                                <i class="fas fa-map-marker-alt text-4xl ${team.textColor} drop-shadow-md"></i>
+                                <div class="absolute -top-12 left-1/2 transform -translate-x-1/2 bg-white px-3 py-1 rounded-lg shadow-lg text-sm font-bold whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity z-20 pointer-events-none border-2 border-slate-200">
+                                    ${m.name} <br> <span class="text-xs text-slate-500 font-normal">oleh ${team.name}</span>
+                                </div>
+                            </div>
+                        `;
+                        mapArea.appendChild(pin);
+                    }
+                });
+            }
+        </script>
+
+        <!-- View: LEADERBOARD -->
+        <div id="view-leaderboard" class="hidden-view min-h-full p-6 max-w-4xl mx-auto flex flex-col pb-20">
+            <div class="flex justify-between items-center mb-8">
+                <h2 class="text-3xl font-display font-bold text-sky-900"><i class="fas fa-trophy text-yellow-500 mr-2"></i> Klasemen Penjelajah</h2>
+                <button onclick="app.showView('dashboard')" class="bg-slate-200 text-slate-700 font-bold py-2 px-6 rounded-xl hover:bg-slate-300">Kembali</button>
+            </div>
+
+            <div id="leaderboardList" class="flex flex-col gap-4 mb-8">
+                <!-- Injected via JS -->
+            </div>
+
+            <!-- Awards Section (Visible mostly end of game) -->
+            <div id="awardsSection" class="mt-8 pt-8 border-t-4 border-slate-200">
+                <h3 class="text-2xl font-bold text-center text-slate-800 mb-6">Penghargaan Khusus</h3>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div class="bg-gradient-to-r from-blue-100 to-sky-100 p-4 rounded-xl flex items-center border border-blue-200">
+                        <div class="w-12 h-12 bg-blue-500 text-white rounded-full flex items-center justify-center text-xl mr-4"><i class="fas fa-map-signs"></i></div>
+                        <div><div class="font-bold text-blue-900">Tim Penjelajah Terbaik</div><div class="text-sm text-blue-700">Menyelesaikan pos terbanyak</div></div>
+                    </div>
+                    <div class="bg-gradient-to-r from-purple-100 to-fuchsia-100 p-4 rounded-xl flex items-center border border-purple-200">
+                        <div class="w-12 h-12 bg-purple-500 text-white rounded-full flex items-center justify-center text-xl mr-4"><i class="fas fa-search"></i></div>
+                        <div><div class="font-bold text-purple-900">Tim Detektif Geografi</div><div class="text-sm text-purple-700">Analisis paling tajam</div></div>
+                    </div>
+                    <div class="bg-gradient-to-r from-emerald-100 to-teal-100 p-4 rounded-xl flex items-center border border-emerald-200">
+                        <div class="w-12 h-12 bg-emerald-500 text-white rounded-full flex items-center justify-center text-xl mr-4"><i class="fas fa-compass"></i></div>
+                        <div><div class="font-bold text-emerald-900">Tim Navigator Dunia</div><div class="text-sm text-emerald-700">Paling sedikit butuh petunjuk</div></div>
+                    </div>
+                    <div class="bg-gradient-to-r from-orange-100 to-amber-100 p-4 rounded-xl flex items-center border border-orange-200">
+                        <div class="w-12 h-12 bg-orange-500 text-white rounded-full flex items-center justify-center text-xl mr-4"><i class="fas fa-hands-helping"></i></div>
+                        <div><div class="font-bold text-orange-900">Tim Kolaborasi Terbaik</div><div class="text-sm text-orange-700">Kerja sama tim paling kompak</div></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <script>
+            app.renderLeaderboard = function() {
+                const list = document.getElementById('leaderboardList');
+                list.innerHTML = '';
+                
+                // Sort teams by stars descending
+                const sortedTeams = [...appState.teams].sort((a, b) => b.stars - a.stars);
+
+                sortedTeams.forEach((team, index) => {
+                    const el = document.createElement('div');
+                    let rankIcon = `<span class="font-bold text-2xl text-slate-400 w-8 text-center">${index + 1}</span>`;
+                    let bgClass = 'bg-white';
+                    
+                    if(index === 0) { rankIcon = `<i class="fas fa-medal text-3xl text-yellow-400 w-8 text-center"></i>`; bgClass = 'bg-yellow-50 border-yellow-200'; }
+                    if(index === 1) { rankIcon = `<i class="fas fa-medal text-3xl text-slate-300 w-8 text-center"></i>`; bgClass = 'bg-slate-50 border-slate-200'; }
+                    if(index === 2) { rankIcon = `<i class="fas fa-medal text-3xl text-orange-400 w-8 text-center"></i>`; bgClass = 'bg-orange-50 border-orange-200'; }
+
+                    el.className = `flex items-center justify-between p-4 rounded-2xl border-2 shadow-sm ${bgClass}`;
+                    el.innerHTML = `
+                        <div class="flex items-center gap-4">
+                            ${rankIcon}
+                            <div class="w-12 h-12 ${team.color} text-white rounded-full flex items-center justify-center text-2xl shadow-inner">
+                                <i class="fas ${team.icon}"></i>
+                            </div>
+                            <span class="font-bold text-xl text-slate-800">${team.name}</span>
+                        </div>
+                        <div class="flex items-center bg-slate-100 px-4 py-2 rounded-xl">
+                            <span class="text-2xl font-black text-slate-700 mr-2">${team.stars}</span>
+                            <i class="fas fa-star text-yellow-500 text-xl"></i>
+                        </div>
+                    `;
+                    list.appendChild(el);
+                });
+            }
+        </script>
+
+        <!-- View: TOURNAMENT -->
+        <div id="view-tournament" class="hidden-view min-h-full flex flex-col bg-slate-900 text-white relative">
+             <div class="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/stardust.png')] opacity-30 pointer-events-none"></div>
+             
+             <div class="p-4 flex justify-between items-center bg-slate-800/80 backdrop-blur z-10 border-b border-slate-700">
+                <h2 class="text-2xl font-display font-bold text-yellow-400"><i class="fas fa-crown mr-2"></i> TOURNAMENT TGT</h2>
+                <div class="flex gap-2">
+                    <button onclick="document.getElementById('t-standings').classList.toggle('hidden')" class="bg-indigo-600 px-4 py-2 rounded hover:bg-indigo-500 font-bold"><i class="fas fa-list-ol"></i> Skor</button>
+                    <button onclick="app.showView('dashboard')" class="bg-slate-600 px-4 py-2 rounded hover:bg-slate-500 font-bold">Keluar</button>
+                </div>
+             </div>
+
+             <div class="flex-1 flex p-6 gap-6 z-10 relative">
+                 <!-- Main Presentation Area -->
+                 <div class="flex-1 bg-slate-800 rounded-3xl border border-slate-600 shadow-2xl flex flex-col items-center justify-center p-12 text-center relative overflow-hidden" id="tourney-screen">
+                    <i class="fas fa-trophy text-9xl text-yellow-500 mb-8 animate-bounce-slight drop-shadow-[0_0_15px_rgba(234,179,8,0.5)]"></i>
+                    <h1 class="text-6xl font-display font-bold mb-4">TOURNAMENT FINAL</h1>
+                    <p class="text-2xl text-slate-300 mb-8">Siapkan kelompokmu. Angkat kartu jawaban dengan cepat!</p>
+                    <button onclick="startTournamentRound(1)" class="bg-gradient-to-r from-yellow-500 to-orange-500 text-white font-bold text-2xl py-4 px-10 rounded-full hover:scale-105 transition shadow-[0_0_20px_rgba(245,158,11,0.4)]">
+                        Mulai Ronde 1
+                    </button>
+                 </div>
+
+                 <!-- Standings Panel (Toggleable) -->
+                 <div id="t-standings" class="w-80 bg-slate-800 rounded-3xl border border-slate-600 shadow-xl p-4 flex flex-col hidden transition-all">
+                     <h3 class="font-bold text-xl mb-4 text-center border-b border-slate-600 pb-2">Skor Tournament</h3>
+                     <div id="tourney-teams" class="flex-1 overflow-y-auto flex flex-col gap-3">
+                         <!-- Injected by JS -->
+                     </div>
+                 </div>
+             </div>
+        </div>
+
+        <script>
+            let currentTourneyQ = 0;
+            const tourneyData = [
+                { type: 'round1', title: 'RONDE 1: Tebak Gambar (+2 ⭐)', image: 'https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcSzDbzwvpD0oN0KASyDQof9oFc-6rnnL4jKg9ZjGG-XHA&s=10', answer: 'Gunung Everest', stars: 2 },
+                { type: 'round1', title: 'RONDE 1: Tebak Gambar (+2 ⭐)', image: 'https://img.magnific.com/premium-photo/stunning-view-grand-canyon-golden-hour-with-sun-setting-rugged-cliffs-painted-desert-landscape_349938-17322.jpg?semt=ais_hybrid&w=740&q=80', answer: 'Grand Canyon', stars: 2 },
+                { type: 'round2', title: 'RONDE 2: Tebak Benua (+1 ⭐)', question: 'Di benua manakah letak Pegunungan Alpen?', answer: 'Eropa', stars: 1 },
+                { type: 'round2', title: 'RONDE 2: Tebak Benua (+1 ⭐)', question: 'Di benua manakah letak Sungai Amazon?', answer: 'Amerika', stars: 1 },
+                { type: 'round3', title: 'RONDE 3: Detektif (+2 ⭐)', question: 'Bagaimana kondisi Gurun Sahara memengaruhi kehidupan manusia di sekitarnya?', options: ['Membangun rumah es', 'Menggunakan pakaian tebal berlapis', 'Mencari dan bermukim di dekat Oase', 'Bertani padi sepanjang tahun'], answer: 'Mencari dan bermukim di dekat Oase', stars: 2 },
+                { type: 'bonus', title: 'SUPER BONUS (+3 ⭐)', question: 'Mengapa setiap negara memiliki bentang alam yang berbeda-beda?', answer: '(Guru menilai: Karena perbedaan letak astronomis, pergerakan lempeng tektonik, dan iklim)', stars: 3 }
+            ];
+
+            function renderTourneyTeams() {
+                const container = document.getElementById('tourney-teams');
+                container.innerHTML = '';
+                const sorted = [...appState.teams].sort((a, b) => b.stars - a.stars);
+                sorted.forEach(t => {
+                    container.innerHTML += `
+                        <div class="bg-slate-700 p-3 rounded-xl flex items-center justify-between">
+                            <div class="font-bold ${t.textColor}"><i class="fas ${t.icon} w-6"></i> ${t.name}</div>
+                            <div class="flex items-center gap-2">
+                                <span class="font-black text-xl text-white">${t.stars}</span>
+                                <div class="flex flex-col gap-1">
+                                    <button onclick="addTourneyStars('${t.id}', 1)" class="bg-green-600 hover:bg-green-500 text-xs px-2 rounded">+</button>
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                });
+            }
+
+            function addTourneyStars(teamId, amount) {
+                const t = appState.teams.find(x => x.id === teamId);
+                t.stars += amount;
+                saveData();
+                sfx.star();
+                renderTourneyTeams();
+            }
+
+            function startTournamentRound(qIndex) {
+                renderTourneyTeams();
+                document.getElementById('t-standings').classList.remove('hidden');
+                
+                const screen = document.getElementById('tourney-screen');
+                if(qIndex >= tourneyData.length) {
+                    app.triggerConfetti();
+                    screen.innerHTML = `
+                        <i class="fas fa-medal text-9xl text-yellow-400 mb-6"></i>
+                        <h1 class="text-5xl font-bold mb-4">TOURNAMENT SELESAI!</h1>
+                        <p class="text-xl mb-8">Mari kita lihat hasil akhir klasemen.</p>
+                        <button onclick="app.showView('leaderboard')" class="bg-blue-600 px-8 py-4 rounded-full font-bold text-xl hover:bg-blue-500">Lihat Klasemen Akhir</button>
+                    `;
+                    return;
+                }
+
+                currentTourneyQ = qIndex;
+                const q = tourneyData[qIndex];
+                
+                let content = `<h2 class="text-3xl font-bold text-yellow-400 mb-8 absolute top-8 left-8">${q.title}</h2>`;
+                
+                if(q.type === 'round1') {
+                    content += `
+                        <img src="${q.image}" class="h-64 rounded-xl border-4 border-slate-500 mb-8 shadow-2xl">
+                        <button id="btnReveal" onclick="revealTourneyAnswer('${q.answer}')" class="bg-slate-600 px-8 py-3 rounded-full font-bold hover:bg-slate-500 text-xl">Buka Jawaban</button>
+                        <div id="t-answer" class="hidden text-5xl font-bold text-green-400 mt-6">${q.answer}</div>
+                    `;
+                } else if(q.type === 'round2' || q.type === 'bonus') {
+                     content += `
+                        <div class="text-4xl font-bold max-w-3xl leading-relaxed mb-8">${q.question}</div>
+                        <button id="btnReveal" onclick="revealTourneyAnswer('${q.answer}')" class="bg-slate-600 px-8 py-3 rounded-full font-bold hover:bg-slate-500 text-xl">Buka Jawaban</button>
+                        <div id="t-answer" class="hidden text-3xl font-bold text-green-400 mt-6 max-w-2xl">${q.answer}</div>
+                    `;
+                } else if(q.type === 'round3') {
+                     content += `
+                        <div class="text-3xl font-bold max-w-3xl mb-8">${q.question}</div>
+                        <div class="grid grid-cols-2 gap-4 w-full max-w-3xl mb-8 text-left">
+                            ${q.options.map((opt, i) => `<div class="bg-slate-700 p-4 rounded-xl text-xl"><span class="font-bold text-slate-400 mr-2">${['A','B','C','D'][i]}.</span> ${opt}</div>`).join('')}
+                        </div>
+                        <button id="btnReveal" onclick="revealTourneyAnswer('${q.answer}')" class="bg-slate-600 px-8 py-3 rounded-full font-bold hover:bg-slate-500 text-xl">Buka Jawaban</button>
+                        <div id="t-answer" class="hidden text-3xl font-bold text-green-400 mt-6 bg-slate-800 p-4 rounded-xl border border-green-500">${q.answer}</div>
+                    `;
+                }
+
+                content += `<div class="absolute bottom-8 right-8"><button onclick="startTournamentRound(${qIndex + 1})" class="bg-sky-600 px-6 py-2 rounded-full font-bold hover:bg-sky-500">Soal Selanjutnya <i class="fas fa-arrow-right ml-2"></i></button></div>`;
+                
+                screen.innerHTML = content;
+            }
+
+            function revealTourneyAnswer(ans) {
+                document.getElementById('btnReveal').classList.add('hidden');
+                const ansDiv = document.getElementById('t-answer');
+                ansDiv.classList.remove('hidden');
+                sfx.correct();
+                // Teacher manually awards points via sidebar
+            }
+        </script>
+
+
+        <!-- View: TEACHER -->
+        <div id="view-teacher" class="hidden-view min-h-full p-8 max-w-5xl mx-auto flex flex-col pb-20">
+            <div class="flex justify-between items-center mb-8 border-b-2 border-slate-200 pb-4">
+                <h2 class="text-3xl font-bold text-slate-800"><i class="fas fa-cog text-slate-400 mr-2"></i> Teacher Control Panel</h2>
+                <button onclick="app.showView('home')" class="bg-slate-800 text-white font-bold py-2 px-6 rounded-xl">Tutup Panel</button>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+                <!-- Manage Teams -->
+                <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
+                    <h3 class="font-bold text-lg mb-4 text-sky-800">Manajemen Skor Manual</h3>
+                    <div id="teacherTeamList" class="flex flex-col gap-3">
+                        <!-- Populated by JS -->
+                    </div>
+                </div>
+                
+                <!-- Quick Actions -->
+                <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 flex flex-col gap-4">
+                    <h3 class="font-bold text-lg text-sky-800">Kontrol Permainan</h3>
+                    <button onclick="app.showView('tournament')" class="w-full bg-purple-600 text-white font-bold py-3 rounded-xl hover:bg-purple-700">
+                        <i class="fas fa-crown mr-2"></i> Paksa Mulai Tournament
+                    </button>
+                    <button onclick="app.showView('reflection')" class="w-full bg-teal-600 text-white font-bold py-3 rounded-xl hover:bg-teal-700">
+                        <i class="fas fa-comment-dots mr-2"></i> Buka Layar Refleksi
+                    </button>
+                    <hr class="my-2">
+                    <button onclick="resetGame()" class="w-full bg-red-100 text-red-700 font-bold py-3 rounded-xl border border-red-300 hover:bg-red-200">
+                        <i class="fas fa-trash mr-2"></i> Reset Seluruh Data (Mulai Baru)
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- View: REFLECTION -->
+        <div id="view-reflection" class="hidden-view min-h-full p-8 max-w-4xl mx-auto flex flex-col justify-center text-center">
+            <i class="fas fa-lightbulb text-6xl text-amber-400 mb-6"></i>
+            <h1 class="text-5xl font-display font-bold text-sky-900 mb-10">REFLEKSI PENJELAJAH</h1>
+            
+            <div class="bg-white p-8 rounded-3xl shadow-lg border-2 border-slate-100 text-left space-y-6 text-xl">
+                <p class="font-bold text-slate-700"><span class="text-sky-500 mr-2">1.</span> Bentang alam apa yang paling menarik bagi kelompok kalian? Mengapa?</p>
+                <p class="font-bold text-slate-700"><span class="text-sky-500 mr-2">2.</span> Apa yang membedakan bentang alam di benua satu dengan benua lainnya?</p>
+                <p class="font-bold text-slate-700"><span class="text-sky-500 mr-2">3.</span> Apa manfaat kita mengenal berbagai bentang alam di dunia?</p>
+                <p class="font-bold text-slate-700"><span class="text-sky-500 mr-2">4.</span> Bagaimana kondisi geografis/bentang alam memengaruhi kehidupan masyarakat di sekitarnya?</p>
+            </div>
+            
+            <div class="mt-10">
+                <button onclick="app.showView('dashboard')" class="bg-slate-200 text-slate-700 font-bold py-3 px-8 rounded-full hover:bg-slate-300">Selesai & Kembali</button>
+            </div>
+        </div>
+
+        <script>
+            app.renderTeacherDashboard = function() {
+                const list = document.getElementById('teacherTeamList');
+                list.innerHTML = '';
+                appState.teams.forEach(t => {
+                    list.innerHTML += `
+                        <div class="flex items-center justify-between bg-slate-50 p-3 rounded-lg border border-slate-200">
+                            <span class="font-bold ${t.textColor}"><i class="fas ${t.icon} w-6"></i> ${t.name}</span>
+                            <div class="flex items-center gap-3">
+                                <button onclick="modifyScore('${t.id}', -1)" class="w-8 h-8 rounded-full bg-red-100 text-red-600 hover:bg-red-200 font-bold">-</button>
+                                <span class="font-bold text-lg w-6 text-center">${t.stars}</span>
+                                <button onclick="modifyScore('${t.id}', 1)" class="w-8 h-8 rounded-full bg-green-100 text-green-600 hover:bg-green-200 font-bold">+</button>
+                            </div>
+                        </div>
+                    `;
+                });
+            }
+
+            function modifyScore(teamId, delta) {
+                const team = appState.teams.find(t => t.id === teamId);
+                team.stars = Math.max(0, team.stars + delta);
+                saveData();
+                app.renderTeacherDashboard();
+            }
+        </script>
+
+    </main>
+
+    <script>
+        // Init logic
+        document.addEventListener('DOMContentLoaded', () => {
+            app.showView('home');
+        });
+    </script>
+</body>
+</html>
